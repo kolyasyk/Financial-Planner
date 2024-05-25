@@ -1,4 +1,4 @@
-from financial_planner_dash.financial_planner_dash import FinancialPlannerDash
+from financial_planner.financial_planner_dash.financial_planner_dash import FinancialPlannerDash
 
 
 def main():
