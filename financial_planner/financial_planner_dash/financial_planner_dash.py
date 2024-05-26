@@ -1,39 +1,92 @@
 from dash import Dash, html, dcc, dash_table
-from dash.dependencies import Input, Output
+import dash_bootstrap_components as dbc
+from datetime import datetime
+from dash.dependencies import Input, Output, State, MATCH, ALL
+import plotly.graph_objs as go
+
 from financial_planner.data_processors.data_loaders import read_incomes
-from financial_planner.data_classes.data_classes import Contributor
+from financial_planner.data_classes.contributor import Contributor
+from financial_planner.data_classes.account import Account
 from financial_planner.data_processors.data_loaders import get_contributors
+from financial_planner.data_processors.data_loaders import get_accounts
 
 
 class FinancialPlannerDash(Dash):
     def __init__(self, title='My Dashboard', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title = title
-        self.contributors = get_contributors()
+        # self.contributors: {str: Contributor} = get_contributors()
+        self.accounts: {str: Account} = get_accounts()
+        years, totals = self.calculate_accounts_total()
+        self.fig = go.Figure(data=[go.Scatter(x=years, y=totals)])
         self.incomes_df = read_incomes()
         self.layout = self.create_layout()
         self.init_callbacks()
 
+    def calculate_accounts_total(self) -> ([float], [float]):
+        years = [x for x in range(0, 50)]
+        total = [0] * 50
+        for account in self.accounts.values():
+            if account.enabled:
+                for year in years:
+                    total[year] += account.start_amount * (1 + account.gain_rate) ** year
+        return years, total
+
+    @staticmethod
+    def get_account_card(account: Account) -> html.Div:
+        return html.Div(dbc.Card(
+            [
+                dbc.CardBody(
+                    [
+                        html.Div([
+                            html.H4(account.name, className="card-title", style={"display": "inline-block"}),
+                            dbc.Switch(
+                                id={'type': 'account-selection', 'id': account.name},
+                                label="",
+                                value=account.enabled,
+                                className="float-right",
+                                style={"display": "inline-block", "float": "right"},
+                            ),
+                        ]),
+                        html.I(f"Start Date: {account.start_date.strftime('%m/%m/%Y')}"),
+                        html.Br(),
+                        html.I(f"Start Amount: ${account.start_amount:,.2f}"),
+                        html.Br(),
+                        html.I(f"Gain Rate: {account.gain_rate * 100:.2f}%"),
+                    ]
+                ),
+            ],
+            style={"width": "20rem"},
+        ))
+
+    @staticmethod
+    def get_account_cards(accounts: [Account]) -> html.Div:
+        return html.Div([FinancialPlannerDash.get_account_card(account) for account in accounts])
+
     def create_layout(self):
-        list_of_contributors = get_contributors()
-        list_of_contributor_divs = [html.Div(children=[dcc.Markdown(f"*{x.name}*\n\n{x.birthday}"), html.Button("Edit", id=f"contributor-edit:{x.name}")]) for x in list_of_contributors]
         return html.Div([
             html.H1(self.title),
+            dbc.Row([
+                dbc.Col([
+                    self.get_account_cards([x for x in self.accounts.values()]),
+                ]),
+                dbc.Col([
+                    dcc.Graph(id="main-graph", figure=self.fig)
+                ]),
+            ]),
             html.Div(id='output-text', children='waiting for input...'),
-            dash_table.DataTable(
-                self.incomes_df.to_dict("records"),
-                columns=[{"name": i, "id": i} for i in self.incomes_df.columns],
-            ),
-            *list_of_contributor_divs
         ])
 
     def init_callbacks(self):
-        for contributor in get_contributors():
-            @self.callback(
-                Output(component_id='output-text', component_property='children', allow_duplicate=True),
-                Input(component_id=f"contributor-edit:{contributor.name}", component_property="n_clicks"),
-                prevent_initial_call=True
-            )
-            def update_output(_, editing_contributor=contributor):
-                return f"Editing: {editing_contributor.name}"
-
+        @self.callback(
+            Output("output-text", "children"),
+            Output("main-graph", "figure"),
+            [Input({'type': 'account-selection', 'id': ALL}, "id")],
+            [Input({'type': 'account-selection', 'id': ALL}, "value")]
+        )
+        def update_account_selection(switch_ids, values):
+            for switch_id, value in zip(switch_ids, values):
+                self.accounts[switch_id['id']].enabled = value
+            years, totals = self.calculate_accounts_total()
+            self.fig = go.Figure(data=[go.Scatter(x=years, y=totals)])
+            return f"ids: {switch_ids}, values: {values}", self.fig
