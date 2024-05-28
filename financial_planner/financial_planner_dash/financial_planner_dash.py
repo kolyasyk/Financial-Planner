@@ -53,6 +53,8 @@ class FinancialPlannerDash(Dash):
                         html.I(f"Start Amount: ${account.start_amount:,.2f}"),
                         html.Br(),
                         html.I(f"Gain Rate: {account.gain_rate * 100:.2f}%"),
+                        html.Br(),
+                        dbc.Button("Delete", id={'type': 'delete-account', 'id': account.name})
                     ]
                 ),
             ],
@@ -79,12 +81,26 @@ class FinancialPlannerDash(Dash):
 
     def init_callbacks(self):
         @self.callback(
-            Output("output-text", "children"),
-            Output("main-graph", "figure"),
+            Output("main-graph", "figure", allow_duplicate=True),
             [Input({'type': 'account-selection', 'id': ALL}, "id")],
-            [Input({'type': 'account-selection', 'id': ALL}, "value")]
+            [Input({'type': 'account-selection', 'id': ALL}, "value")],
+            prevent_initial_call = True,
         )
         def update_account_selection(switch_ids, values):
+            for switch_id, value in zip(switch_ids, values):
+                self.accounts[switch_id['id']].enabled = value
+            years, totals = self.calculate_accounts_total()
+            self.fig = go.Figure(data=[go.Scatter(x=years, y=totals)])
+            return self.fig
+
+        @self.callback(
+            Output("output-text", "children", allow_duplicate=True),
+            Output("main-graph", "figure", allow_duplicate=True),
+            [Input({'type': 'delete-account', 'id': ALL}, "id")],
+            [Input({'type': 'delete-account', 'id': ALL}, "active")],
+            prevent_initial_call=True,
+        )
+        def delete_account(switch_ids, values):
             for switch_id, value in zip(switch_ids, values):
                 self.accounts[switch_id['id']].enabled = value
             years, totals = self.calculate_accounts_total()
