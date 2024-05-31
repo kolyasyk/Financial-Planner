@@ -19,7 +19,7 @@ class FinancialPlannerDash(Dash):
         self.accounts: {str: Account} = get_accounts()
         years, totals = self.calculate_accounts_total()
         self.fig = go.Figure(data=[go.Scatter(x=years, y=totals)])
-        self.incomes_df = read_incomes()
+        # self.incomes_df = read_incomes()
         self.layout = self.create_layout()
         self.init_callbacks()
 
@@ -35,49 +35,49 @@ class FinancialPlannerDash(Dash):
     @staticmethod
     def get_account_card(account: Account) -> html.Div:
         return html.Div(dbc.Card(
-            [
-                dbc.CardBody(
-                    [
-                        html.Div([
-                            html.H4(account.name, className="card-title", style={"display": "inline-block"}),
-                            dbc.Switch(
-                                id={'type': 'account-selection', 'id': account.name},
-                                label="",
-                                value=account.enabled,
-                                className="float-right",
-                                style={"display": "inline-block", "float": "right"},
-                            ),
-                        ]),
-                        html.I(f"Start Date: {account.start_date.strftime('%m/%m/%Y')}"),
-                        html.Br(),
-                        html.I(f"Start Amount: ${account.start_amount:,.2f}"),
-                        html.Br(),
-                        html.I(f"Gain Rate: {account.gain_rate * 100:.2f}%"),
-                        html.Br(),
-                        dbc.Button("Delete", id={'type': 'delete-account', 'id': account.name})
-                    ]
-                ),
-            ],
+            dbc.CardBody(
+                [
+                    html.Div([
+                        html.H4(account.name, className="card-title", style={"display": "inline-block"}),
+                        dbc.Switch(
+                            id={'type': 'account-selection', 'id': account.name},
+                            label="",
+                            value=account.enabled,
+                            className="float-right",
+                            style={"display": "inline-block", "float": "right"},
+                        ),
+                    ]),
+                    html.I(f"Start Date: {account.start_date.strftime('%m/%m/%Y')}"),
+                    html.Br(),
+                    html.I(f"Start Amount: ${account.start_amount:,.2f}"),
+                    html.Br(),
+                    html.I(f"Gain Rate: {account.gain_rate * 100:.2f}%"),
+                    html.Br(),
+                    dbc.Button("Delete", id={'type': 'delete-account', 'id': account.name})
+                ]
+            ),
             style={"width": "20rem"},
-        ))
+        ),
+        className="mb-3")
 
     @staticmethod
     def get_account_cards(accounts: [Account]) -> html.Div:
         return html.Div([FinancialPlannerDash.get_account_card(account) for account in accounts])
 
     def create_layout(self):
-        return html.Div([
+        return dbc.Container(html.Div([
             html.H1(self.title),
             dbc.Row([
-                dbc.Col([
+                dbc.Col(
                     self.get_account_cards([x for x in self.accounts.values()]),
-                ]),
+                ),
                 dbc.Col([
                     dcc.Graph(id="main-graph", figure=self.fig)
                 ]),
             ]),
             html.Div(id='output-text', children='waiting for input...'),
-        ])
+        ],
+        ), className="mt-5")
 
     def init_callbacks(self):
         @self.callback(

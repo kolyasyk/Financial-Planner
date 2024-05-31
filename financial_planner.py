@@ -5,9 +5,8 @@ import dash_bootstrap_components as dbc
 def main():
     app = FinancialPlannerDash(
         title='Financial Planner',
-        external_stylesheets=[dbc.themes.SANDSTONE, dbc.icons.FONT_AWESOME],
+        external_stylesheets=[dbc.themes.BOOTSTRAP],
     )
-    app.config.external_stylesheets = [dbc.themes.SANDSTONE]
     app.run_server(debug=True, port=80, host='192.168.8.48')
 
 
