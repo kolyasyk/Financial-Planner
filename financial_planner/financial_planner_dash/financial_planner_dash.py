@@ -1,8 +1,9 @@
-from dash import Dash, html, dcc, dash_table
+from dash import Dash, html, dcc, dash_table, callback_context
 import dash_bootstrap_components as dbc
 from datetime import datetime
 from dash.dependencies import Input, Output, State, MATCH, ALL
 import plotly.graph_objs as go
+import json
 
 from financial_planner.data_processors.data_loaders import read_incomes
 from financial_planner.data_classes.contributor import Contributor
@@ -33,43 +34,21 @@ class FinancialPlannerDash(Dash):
         return years, total
 
     @staticmethod
-    def get_account_card(account: Account) -> html.Div:
-        return html.Div(dbc.Card(
-            dbc.CardBody(
-                [
-                    html.Div([
-                        html.H4(account.name, className="card-title", style={"display": "inline-block"}),
-                        dbc.Switch(
-                            id={'type': 'account-selection', 'id': account.name},
-                            label="",
-                            value=account.enabled,
-                            className="float-right",
-                            style={"display": "inline-block", "float": "right"},
-                        ),
-                    ]),
-                    html.I(f"Start Date: {account.start_date.strftime('%m/%m/%Y')}"),
-                    html.Br(),
-                    html.I(f"Start Amount: ${account.start_amount:,.2f}"),
-                    html.Br(),
-                    html.I(f"Gain Rate: {account.gain_rate * 100:.2f}%"),
-                    html.Br(),
-                    dbc.Button("Delete", id={'type': 'delete-account', 'id': account.name})
-                ]
-            ),
-            style={"width": "20rem"},
-        ),
-        className="mb-3")
-
-    @staticmethod
-    def get_account_cards(accounts: [Account]) -> html.Div:
-        return html.Div([FinancialPlannerDash.get_account_card(account) for account in accounts])
+    def get_account_cards(accounts: [Account]) -> [dbc.Card]:
+        return [account.get_account_card() for account in accounts]
 
     def create_layout(self):
         return dbc.Container(html.Div([
+            Account.get_new_account_modal_form(),
             html.H1(self.title),
             dbc.Row([
-                dbc.Col(
-                    self.get_account_cards([x for x in self.accounts.values()]),
+                dbc.Col([
+                    dbc.CardGroup(
+                        self.get_account_cards([x for x in self.accounts.values()]),
+                        style={"margin": "10px"},
+                    ),
+                    dbc.Button("Add New Account", id='add-account')],
+                    id="account-cards",
                 ),
                 dbc.Col([
                     dcc.Graph(id="main-graph", figure=self.fig)
@@ -84,7 +63,7 @@ class FinancialPlannerDash(Dash):
             Output("main-graph", "figure", allow_duplicate=True),
             [Input({'type': 'account-selection', 'id': ALL}, "id")],
             [Input({'type': 'account-selection', 'id': ALL}, "value")],
-            prevent_initial_call = True,
+            prevent_initial_call=True,
         )
         def update_account_selection(switch_ids, values):
             for switch_id, value in zip(switch_ids, values):
@@ -94,15 +73,30 @@ class FinancialPlannerDash(Dash):
             return self.fig
 
         @self.callback(
-            Output("output-text", "children", allow_duplicate=True),
             Output("main-graph", "figure", allow_duplicate=True),
+            Output("account-cards", "children", allow_duplicate=True),
             [Input({'type': 'delete-account', 'id': ALL}, "id")],
-            [Input({'type': 'delete-account', 'id': ALL}, "active")],
+            [Input({'type': 'delete-account', 'id': ALL}, "n_clicks")],
             prevent_initial_call=True,
         )
         def delete_account(switch_ids, values):
-            for switch_id, value in zip(switch_ids, values):
-                self.accounts[switch_id['id']].enabled = value
+            ctx = callback_context
+            if not ctx.triggered:
+                button_id = 'None'
+            else:
+                account_name = json.loads(ctx.triggered[0]['prop_id'].split('.')[0])["id"].split(":")[1]
+                if account_name in self.accounts:
+                    del self.accounts[account_name]
             years, totals = self.calculate_accounts_total()
             self.fig = go.Figure(data=[go.Scatter(x=years, y=totals)])
-            return f"ids: {switch_ids}, values: {values}", self.fig
+            return self.fig, self.get_account_cards([x for x in self.accounts.values()])
+
+        @self.callback(
+            Output("add-account-modal", "is_open"),
+            [Input("add-account", "n_clicks"), Input("close", "n_clicks")],
+            [State("add-account-modal", "is_open")],
+        )
+        def toggle_modal(n1, n2, is_open):
+            if n1 or n2:
+                return not is_open
+            return is_open
